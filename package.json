@@ -21,12 +21,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Blalexander/Destiny-2-Server.git"
+    "url": "git+https://github.com/Blalexander/RTH-Server.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Blalexander/Destiny-2-Server/issues"
+    "url": "https://github.com/Blalexander/RTH-Server/issues"
   },
-  "homepage": "https://github.com/Blalexander/Destiny-2-Server#readme"
+  "homepage": "https://github.com/Blalexander/RTH-Server#readme"
 }
