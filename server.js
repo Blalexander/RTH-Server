@@ -6,6 +6,7 @@ const axios = require('axios');
 const app = express();
 const cors = require('cors');
 const morgan = require('morgan');
+const passport = require('passport');
 
 app.use(morgan('common'));
 
@@ -14,9 +15,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cors({origin: "*"}));
 
+const apiRoute = require("./routes/apiRouter");
+app.use("/api", apiRoute);
 
-// const bungieRoute = require("./routes/bungieRouter");
-// app.use("/bungie", bungieRoute);
+const { router: usersRouter } = require('./users');
+app.use("/users", usersRouter);
+
+const { router: authRouter, localStrategy, jwtStrategy } = require('./auth');
+app.use('/auth', authRouter);
+
+passport.use(localStrategy);
+passport.use(jwtStrategy);
+const jwtAuth = passport.authenticate('jwt', { session: false });
 
 // const PORT = process.env.PORT || 8080;
 
@@ -34,13 +44,20 @@ app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
 
 
 const MongoClient = require('mongodb').MongoClient;
-const uri = "mongodb+srv://Admin:Admin%40RTH@cluster0.qbhpb.mongodb.net/rth_development?retryWrites=true&w=majority";
+const uri = "mongodb+srv://Admin:Admin@cluster0.qbhpb.mongodb.net/rth_development?retryWrites=true&w=majority";
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 client.connect(err => {
   const collection = client.db("rth_development").collection("devel_coll");
+  // const cursor = collection.find({})
+  // console.log(cursor)
   // perform actions on the collection object
+
   client.close();
 });
+
+// app.get('/test', async (req, res) => {
+//   const resObj = await client.db("rth_development").collection("devel_coll").find({}).then(res.json(resObj))
+// })
 
 app.post('/test', (req, res) => {
   console.log(req.body, req.query)
@@ -60,7 +77,7 @@ app.post('/test', (req, res) => {
     if (err) {
       console.log("Error!", err);
     } else {
-      console.info("loadouts were successfully stored.", docs.length);
+      console.info("Estimate was successfully stored.", docs.length);
       res.json("thank you for shopping with us today")
     }
   }
@@ -102,7 +119,7 @@ app.use(function(req, res, next) {
 
 const router = express.Router();
 
-module.exports = {app};
+module.exports = router;
 
 // const path = require('path')
 //     , fs = require('fs')
