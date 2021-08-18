@@ -19,22 +19,56 @@ estimateSchema.pre('findOne', function(next) {
 })
 
 
-// const manifestSchema = mongoose.Schema({
-//   manifest: Object
-// });
+const userSchema = mongoose.Schema({
+  user: Object
+});
 
-// manifestSchema.pre('find', function(next) {
-//   this.populate('manifest');
-//   next();
-// })
+userSchema.pre('find', function(next) {
+  this.populate('user');
+  next();
+})
 
-// manifestSchema.pre('findOne', function(next) {
-//   this.populate('manifest');
-//   next();
-// })
+userSchema.pre('findOne', function(next) {
+  this.populate('user');
+  next();
+})
+
+const scheduleSchema = mongoose.Schema({
+  // name: {
+  //   type: Object,
+  //   default: undefined
+  // },
+  name: String,
+  // data: {
+  //   date: String,
+  //   times: String
+  // },
+  details: {
+    String: String
+  },
+  // date: String,
+  // times: String
+  // data: {type: String},
+  // data: Object
+  // data: {
+  //   type: {date: String},
+  //   type: {times: String}
+  // }
+  
+},{strict: false});
+
+scheduleSchema.pre('find', function(next) {
+  this.populate('schedule');
+  next();
+})
+
+scheduleSchema.pre('findOne', function(next) {
+  this.populate('schedule');
+  next();
+})
 
 const Estimate = mongoose.model("estimate", estimateSchema);
-// const Mani = mongoose.model("Mani", manifestSchema);
+const Users = mongoose.model("user", userSchema);
+const Schedules = mongoose.model("schedule", scheduleSchema);
 
-// module.exports = mongoose.model("PGCR", pgcrSchema);
-module.exports = { Estimate };
+module.exports = { Estimate, Users, Schedules };

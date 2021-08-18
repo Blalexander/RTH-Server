@@ -105,7 +105,10 @@ const {CLIENT_ORIGIN} = require('./config');
 //     })
 // );
 
-app.use(function(req, res, next) {
+const router = express.Router();
+router.use(cors({origin: '*'}))
+
+router.use(function(req, res, next) {
   res.header("Access-Control-Allow-Origin", '*');
   res.header("Access-Control-Allow-Credentials", true);
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
@@ -116,8 +119,6 @@ app.use(function(req, res, next) {
   next();
 });
 
-
-const router = express.Router();
 
 module.exports = router;
 
