@@ -34,14 +34,708 @@ app.get('/', (req, res) => {
   res.json({ok: true});
 });
 
-// app.get('/api/*', (req, res) => {
-//   res.json({ok: true});
-// });
-
 const { PORT } = require("./config");
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
 
 
+
+
+
+
+const path = require('path');
+const OAuthClient = require('intuit-oauth');
+const bodyParser = require('body-parser');
+// const ngrok = process.env.NGROK_ENABLED === 'true' ? require('ngrok') : null;
+
+/**
+ * Configure View and Handlebars
+ */
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, '/public')));
+app.engine('html', require('ejs').renderFile);
+
+app.set('view engine', 'html');
+app.use(bodyParser.json());
+
+const urlencodedParser = bodyParser.urlencoded({ extended: false });
+
+/**
+ * App Variables
+ * @type {null}
+ */
+let oauth2_token_json = null;
+let redirectUri = '';
+
+/**
+ * Instantiate new Client
+ * @type {OAuthClient}
+ */
+
+let oauthClient = null;
+
+app.get('/authUri', urlencodedParser, function (req, res) {
+  oauthClient = new OAuthClient({
+    clientId: 'ABm4IChJWiZjVNEGakr4oxGZVCrVkxI4XZ9O7cfEozK3q7XES5',
+    clientSecret: 'fwMwHuEXtF417MjdzbzZOC6M6TMVKY2Q7jNkQcSb',
+    environment: 'sandbox',
+    redirectUri: 'https://rth-server.azurewebsites.net/callback',
+  });
+
+  const authUri = oauthClient.authorizeUri({
+    scope: [OAuthClient.scopes.Accounting],
+    state: 'intuit-test',
+  });
+  res.send(authUri);
+});
+
+/**
+ * Handle the callback to extract the `Auth Code` and exchange them for `Bearer-Tokens`
+ */
+ app.get('/callback', function (req, res) {
+  oauthClient
+    .createToken(req.url)
+    .then(function (authResponse) {
+      oauth2_token_json = JSON.stringify(authResponse.getJson(), null, 2);
+    })
+    .catch(function (e) {
+      console.error(e);
+    });
+
+  res.send('');
+});
+
+/**
+ * Display the token : CAUTION : JUST for sample purposes
+ */
+app.get('/retrieveToken', function (req, res) {
+  res.send(oauth2_token_json);
+});
+
+app.get('/getCompanyInfo', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/companyinfo/${companyID}` })
+    .then(function (authResponse) {
+      console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+      res.send(JSON.parse(authResponse.text()));
+    })
+    .catch(function (e) {
+      console.error(e);
+    });
+});
+
+app.get('/getOrderInfo', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/query?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/text'}, body: 'select * from invoice' })
+    .then(function (authResponse) {
+      console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+      res.send(JSON.parse(authResponse.text()));
+    })
+    .catch(function (e) {
+      console.error(e);
+      res.status(501).json({code: 501, message: e});
+    });
+});
+
+app.get('/getEstimateInfoSingle', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/estimate/148?minorversion=14` })
+    .then(function (authResponse) {
+      console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+      res.send(JSON.parse(authResponse.text()));
+    })
+    .catch(function (e) {
+      console.error(e);
+    });
+});
+
+app.post('/getEstimateInfo', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/query?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/text'}, body: 'select * from estimate' })
+    .then(function (authResponse) {
+      console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+      res.send(JSON.parse(authResponse.text()));
+    })
+    .catch(function (e) {
+      console.error(e);
+      res.status(501).json({code: 501, message: e});
+    });
+});
+
+app.post('/createEstimate', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  let estimateToSend = {
+    "Line": [],
+    "TxnTaxDetail": {
+      "TotalTax": 0
+    },
+    "CustomerRef": {
+      "value": "3",
+      "name": req.body["Owner Name"]
+    },
+    "CustomerMemo": {
+      "value": "Thank you for your business and have a great day!"
+    },
+    "TotalAmt": 31.5,
+    "ApplyTaxAfterDiscount": false,
+    "PrintStatus": "NeedToPrint",
+    "EmailStatus": "NotSet",
+    "BillEmail": {
+      "Address": req.body["Email"]
+    }
+  }
+
+  let i = 1
+  let runningTotal = 0
+  let itemId
+  for(let eachItem in req.body) {
+    console.log("Each Item: ", eachItem, req.body[eachItem])
+    if(Array.isArray(req.body[eachItem])) {
+      console.log("Is Array? ", eachItem)
+      if(eachItem == "Urn") {
+        itemId = 19
+      }
+      else if(eachItem == "Paw Print Options") {
+        itemId = 20
+      }
+      else if(eachItem == "Jewelry/Keychain") {
+        itemId = 21
+      }
+      else if(eachItem == "Cremation Service") {
+        itemId = 21
+      }
+      else if(eachItem == "Nose Print") {
+        itemId = 21
+      }
+      else {
+        itemId
+      }
+      req.body[eachItem].forEach(item => {
+        console.log("IT IS: ", item, i, itemId)
+        let l = item.length
+        let ind = item.indexOf("$") + 1
+        let itemCost = parseInt(item.slice(-(l - ind)))
+        console.log({itemCost, runningTotal})
+        let itemName = item.slice(0, ind-2)
+        let insertObject1 = {
+          "LineNum": i,
+          "Description": itemName,
+          "Amount": itemCost,
+          "DetailType": "SalesItemLineDetail",
+          "SalesItemLineDetail": {
+            "ItemRef": {
+              "value": itemId,
+              "name": eachItem
+            },
+            "UnitPrice": itemCost,
+            "Qty": 1,
+            "TaxCodeRef": {
+              "value": "NON"
+            }
+          }
+        }
+        let insertObject2 = {
+          "Amount": itemCost,
+          "DetailType": "SubTotalLineDetail",
+          "SubTotalLineDetail": {}
+        }
+        estimateToSend["Line"].push(insertObject1)
+        estimateToSend["Line"].push(insertObject2)
+        runningTotal += itemCost
+        i++
+      })
+    }
+    estimateToSend["TotalAmt"] = runningTotal
+  }
+
+  console.log(estimateToSend)
+
+  let estimateToSend1 = {
+    "Line": [
+      {
+        "Id": "1",
+        "LineNum": 1,
+        "Description": "Pest Services",
+        "Amount": 75.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest"
+          },
+          "UnitPrice": 75,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 75.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      },
+      {
+        "Amount": 3,
+        "DetailType": "DiscountLineDetail",
+        "DiscountLineDetail": {
+          "PercentBased": true,
+          "DiscountPercent": 10,
+          "DiscountAccountRef": {
+            "value": "86",
+            "name": "Discounts given"
+          }
+        }
+      },
+      {
+        "Id": "1",
+        "LineNum": 2,
+        "Description": "Specialty Urn",
+        "Amount": 5.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest Control"
+          },
+          "UnitPrice": 5,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 5.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      }
+    ],
+    "TxnTaxDetail": {
+      "TotalTax": 0
+    },
+    "CustomerRef": {
+      "value": "3",
+      "name": req.body["Owner Name"]
+    },
+    "CustomerMemo": {
+      "value": "Thank you for your business and have a great day!"
+    },
+    "TotalAmt": 31.5,
+    "ApplyTaxAfterDiscount": false,
+    "PrintStatus": "NeedToPrint",
+    "EmailStatus": "NotSet",
+    "BillEmail": {
+      "Address": req.body["Email"]
+    }
+  }
+
+
+  let testAuthRes 
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/query?query=select * from Customer Where DisplayName = '${req.body["Owner Name"]}'&minorversion=14`, method: 'GET' })
+    .then(function (authResponse) {
+      console.log(`The response for API call for Customer Query is :${JSON.stringify(authResponse)}`);
+      // res.send(JSON.parse(authResponse.text()));
+      // let readableRes = JSON.parse(authResponse.text())
+      testAuthRes = authResponse
+      if(testAuthRes.json.QueryResponse.Customer != undefined) {
+        // estimateToSend.CustomerRef.value = readableRes.Customer[0].Id
+        return makeCall(testAuthRes.json.QueryResponse.Customer[0].Id)
+      }
+      else {
+        return createCustomer(req.body["Owner Name"])
+      }
+    })
+    .catch(function (e) {
+      console.error(e);
+      res.status(501).json({code: 501, message: e, where: "During initial Customer Query", why: testAuthRes.json});
+    });
+
+  function createCustomer(newName) {
+    let createCustObj = {
+      "DisplayName": newName
+    }
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/customer?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(createCustObj) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Customer is :${JSON.stringify(authResponse)}`);
+        // let readableRes = JSON.parse(authResponse.text())
+        let callObj = authResponse.json.QueryResponse == undefined ? authResponse.json : authResponse.json.QueryResponse
+        if(callObj.Customer[0] == undefined){
+          return makeCall(callObj.Customer.Id)
+        }
+        else {
+          return makeCall(callObj.Customer[0].Id)
+        }
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Create Customer", why: createCustObj});
+      });
+  }
+
+  function makeCall(newId) {
+    estimateToSend.CustomerRef.value = newId
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/estimate?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(estimateToSend) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Estimate is :${JSON.stringify(authResponse)}`);
+        res.send(JSON.parse(authResponse.text()));
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Make Call"});
+      });
+  }
+});
+
+app.post('/createEstimate2', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+  let estimateToSend = {
+    "Line": [
+      {
+        "Id": "1",
+        "LineNum": 1,
+        "Description": "Pest Services",
+        "Amount": 75.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest"
+          },
+          "UnitPrice": 75,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 75.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      },
+      {
+        "Amount": 3,
+        "DetailType": "DiscountLineDetail",
+        "DiscountLineDetail": {
+          "PercentBased": true,
+          "DiscountPercent": 10,
+          "DiscountAccountRef": {
+            "value": "86",
+            "name": "Discounts given"
+          }
+        }
+      },
+      {
+        "Id": "1",
+        "LineNum": 2,
+        "Description": "Specialty Urn",
+        "Amount": 5.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest Control"
+          },
+          "UnitPrice": 5,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 5.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      }
+    ],
+    "TxnTaxDetail": {
+      "TotalTax": 0
+    },
+    "CustomerRef": {
+      "value": "3",
+      "name": req.body["Owner Name"]
+    },
+    "CustomerMemo": {
+      "value": "Thank you for your business and have a great day!"
+    },
+    "TotalAmt": 31.5,
+    "ApplyTaxAfterDiscount": false,
+    "PrintStatus": "NeedToPrint",
+    "EmailStatus": "NotSet",
+    "BillEmail": {
+      "Address": req.body["Email"]
+    }
+  }
+
+
+  //NEED:
+  //Customer Name
+  //Customer ID
+  //Customer Email
+  //Purchased Items
+
+  let testAuthRes 
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/query?query=select * from Customer Where DisplayName = '${req.body["Owner Name"]}'&minorversion=14`, method: 'GET' })
+    .then(function (authResponse) {
+      console.log(`The response for API call for Initial Query is :${JSON.stringify(authResponse)}`);
+      // res.send(JSON.parse(authResponse.text()));
+      // let readableRes = JSON.parse(authResponse.text())
+      testAuthRes = authResponse
+      if(testAuthRes.json.QueryResponse.Customer != undefined) {
+        // estimateToSend.CustomerRef.value = readableRes.Customer[0].Id
+        return makeCall(testAuthRes.json.QueryResponse.Customer[0].Id)
+      }
+      else {
+        return createCustomer(req.body["Owner Name"])
+      }
+    })
+    .then(newRes => {
+      res.send(newRes)
+    })
+    .catch(function (e) {
+      console.error(e);
+      res.status(501).json({code: 501, message: e, where: "During initial Customer Query", why: testAuthRes.json});
+    });
+
+  function createCustomer(newName) {
+    let createCustObj = {
+      "DisplayName": newName
+    }
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/customer?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(createCustObj) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Customer is :${JSON.stringify(authResponse)}`);
+        // let readableRes = JSON.parse(authResponse.text())
+        res.send(authResponse.json.QueryResponse)
+        // return makeCall(authResponse.json.QueryResponse.Customer[0].Id)
+        //ADD ID to customerObj
+        //RE-SEND initial call
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Create Customer", why: req.body["Owner Name"]});
+      });
+  }
+
+
+  //MAKE customer object
+  //SEND initial call
+  function makeCall(newId) {
+    estimateToSend.CustomerRef.value = newId
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/estimate?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(estimateToSend) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Estimate is :${JSON.stringify(authResponse)}`);
+        res.send(JSON.parse(authResponse.text()));
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Make Call"});
+      });
+  }
+});
+
+app.post('/createEstimate1', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+  let estimateToSend = {
+    "Line": [
+      {
+        "Id": "1",
+        "LineNum": 1,
+        "Description": "Pest Services",
+        "Amount": 75.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest"
+          },
+          "UnitPrice": 75,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 75.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      },
+      {
+        "Amount": 3,
+        "DetailType": "DiscountLineDetail",
+        "DiscountLineDetail": {
+          "PercentBased": true,
+          "DiscountPercent": 10,
+          "DiscountAccountRef": {
+            "value": "86",
+            "name": "Discounts given"
+          }
+        }
+      },
+      {
+        "Id": "1",
+        "LineNum": 2,
+        "Description": "Specialty Urn",
+        "Amount": 5.0,
+        "DetailType": "SalesItemLineDetail",
+        "SalesItemLineDetail": {
+          "ItemRef": {
+            "value": "10",
+            "name": "Pest Control"
+          },
+          "UnitPrice": 5,
+          "Qty": 1,
+          "TaxCodeRef": {
+            "value": "NON"
+          }
+        }
+      },
+      {
+        "Amount": 5.0,
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {}
+      }
+    ],
+    "TxnTaxDetail": {
+      "TotalTax": 0
+    },
+    "CustomerRef": {
+      "value": "3",
+      "name": req.body["Owner Name"]
+    },
+    "CustomerMemo": {
+      "value": "Thank you for your business and have a great day!"
+    },
+    "TotalAmt": 31.5,
+    "ApplyTaxAfterDiscount": false,
+    "PrintStatus": "NeedToPrint",
+    "EmailStatus": "NotSet",
+    "BillEmail": {
+      "Address": req.body["Email"]
+    }
+  }
+
+
+  //NEED:
+  //Customer Name
+  //Customer ID
+  //Customer Email
+  //Purchased Items
+
+  let testAuthRes 
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/query?query=select * from Customer Where DisplayName = '${req.body["Owner Name"]}'&minorversion=14`, method: 'GET' })
+    .then(function (authResponse) {
+      console.log(`The response for API call for Initial Query is :${JSON.stringify(authResponse)}`);
+      // res.send(JSON.parse(authResponse.text()));
+      // let readableRes = JSON.parse(authResponse.text())
+      testAuthRes = authResponse
+      if(testAuthRes.json.QueryResponse.Customer != undefined) {
+        // estimateToSend.CustomerRef.value = readableRes.Customer[0].Id
+        return makeCall(testAuthRes.json.QueryResponse.Customer[0].Id)
+      }
+      else {
+        return createCustomer(req.body["Owner Name"])
+      }
+    })
+    .then(newRes => {
+      res.send(`It got to the second part of Initial Customer Query. ${newRes}`)
+    })
+    .catch(function (e) {
+      console.error(e);
+      res.status(501).json({code: 501, message: e, where: "During initial Customer Query", why: testAuthRes.json.QueryResponse});
+    });
+
+  function createCustomer(newName) {
+    let createCustObj = {
+      "DisplayName": newName
+    }
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/customer?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(createCustObj) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Customer is :${authResponse.json}`);
+        // let readableRes = JSON.parse(authResponse.text())
+        return makeCall(authResponse.json.QueryResponse.Customer[0].Id)
+        //ADD ID to customerObj
+        //RE-SEND initial call
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Create Customer", why: req.body["Owner Name"]});
+      });
+  }
+
+
+  //MAKE customer object
+  //SEND initial call
+  function makeCall(newId) {
+    estimateToSend.CustomerRef.value = newId
+    oauthClient
+      .makeApiCall({ url: `${url}v3/company/${companyID}/estimate?minorversion=14`, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(estimateToSend) })
+      .then(function (authResponse) {
+        console.log(`The response for API call for Create Estimate is :${JSON.stringify(authResponse)}`);
+        res.send(JSON.parse(authResponse.text()));
+      })
+      .catch(function (e) {
+        console.error(e);
+        res.status(501).json({code: 501, message: e, where: "During Make Call"});
+      });
+  }
+});
 
 const MongoClient = require('mongodb').MongoClient;
 const uri = "mongodb+srv://Admin:Admin@cluster0.qbhpb.mongodb.net/rth_development?retryWrites=true&w=majority";
@@ -120,134 +814,6 @@ router.use(function(req, res, next) {
 });
 
 
+
+
 module.exports = router;
-
-// const path = require('path')
-//     , fs = require('fs')
-//     , sourceDirPath = path.resolve(__dirname, '../../public/source'),
-//     demoDocsPath = path.resolve(__dirname, '../../demo_documents'),
-//     docFile = path.resolve(__dirname, 'World_Wide_Corp_fields.pdf')
-//     ;
-
-    
-// makeTemplate()
-// function makeTemplate(){
-
-//   let docPdfBytes;
-//   // read file from a local directory
-//   // The reads could raise an exception if the file is not available!
-//   docPdfBytes = fs.readFileSync(path.resolve(demoDocsPath, docFile));
-
-//   // add the documents
-//   let doc = new docusign.Document()
-//     , docB64 = Buffer.from(docPdfBytes).toString('base64')
-//     ;
-//   doc.documentBase64 = docB64;
-//   doc.name = 'Lorem Ipsum'; // can be different from actual file name
-//   doc.fileExtension = 'pdf';
-//   doc.documentId = '1';
-
-//   // create a signer recipient to sign the document, identified by name and email
-//   // We're setting the parameters via the object creation
-//   let signer1 = docusign.Signer.constructFromObject({
-//       roleName: 'signer',
-//       recipientId: '1',
-//       routingOrder: '1'});
-//   // routingOrder (lower means earlier) determines the order of deliveries
-//   // to the recipients. Parallel routing order is supported by using the
-//   // same integer as the order for two or more recipients.
-
-//   // create a cc recipient to receive a copy of the documents, identified by name and email
-//   // We're setting the parameters via setters
-//   let cc1 = new docusign.CarbonCopy();
-//   cc1.roleName = 'cc';
-//   cc1.routingOrder = '2';
-//   cc1.recipientId = '2';
-
-//   // Create fields using absolute positioning:
-//   let signHere = docusign.SignHere.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "191", yPosition: "148"})
-//     , check1 = docusign.Checkbox.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "75", yPosition: "417",
-//           tabLabel: "ckAuthorization"})
-//     , check2 = docusign.Checkbox.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "75", yPosition: "447",
-//           tabLabel: "ckAuthentication"})
-//     , check3 = docusign.Checkbox.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "75", yPosition: "478",
-//           tabLabel: "ckAgreement"})
-//     , check4 = docusign.Checkbox.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "75", yPosition: "508",
-//           tabLabel: "ckAcknowledgement"})
-//     , list1 = docusign.List.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "142", yPosition: "291",
-//           font: "helvetica", fontSize: "size14", tabLabel: "list",
-//           required: "false",
-//           listItems: [
-//               docusign.ListItem.constructFromObject({text: "Red",    value: "red"   }),
-//               docusign.ListItem.constructFromObject({text: "Orange", value: "orange"}),
-//               docusign.ListItem.constructFromObject({text: "Yellow", value: "yellow"}),
-//               docusign.ListItem.constructFromObject({text: "Green",  value: "green" }),
-//               docusign.ListItem.constructFromObject({text: "Blue",   value: "blue"  }),
-//               docusign.ListItem.constructFromObject({text: "Indigo", value: "indigo"}),
-//               docusign.ListItem.constructFromObject({text: "Violet", value: "violet"})
-//           ]
-//       })
-
-//   //   , number = docusign.Number.constructFromObject({
-//   //         documentId: "1", pageNumber: "1", xPosition: "163", yPosition: "260",
-//   //         font: "helvetica", fontSize: "size14", tabLabel: "numbersOnly",
-//   //         height: "23", width: "84", required: "false"})
-//     , textInsteadOfNumber = docusign.Text.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "153", yPosition: "260",
-//           font: "helvetica", fontSize: "size14", tabLabel: "numbersOnly",
-//           height: "23", width: "84", required: "false"})
-//     , radioGroup = docusign.RadioGroup.constructFromObject({
-//           documentId: "1", groupName: "radio1",
-//           radios: [
-//               docusign.Radio.constructFromObject({
-//                   font: "helvetica", fontSize: "size14", pageNumber: "1",
-//                   value: "white", xPosition: "142", yPosition: "384", required: "false"}),
-//               docusign.Radio.constructFromObject({
-//                   font: "helvetica", fontSize: "size14", pageNumber: "1",
-//                   value: "red", xPosition: "74", yPosition: "384", required: "false"}),
-//               docusign.Radio.constructFromObject({
-//                   font: "helvetica", fontSize: "size14", pageNumber: "1",
-//                   value: "blue", xPosition: "220", yPosition: "384", required: "false"}),
-//           ]})
-//     , text = docusign.Text.constructFromObject({
-//           documentId: "1", pageNumber: "1", xPosition: "153", yPosition: "230",
-//           font: "helvetica", fontSize: "size14", tabLabel: "text",
-//           height: "23", width: "84", required: "false"})
-//     ;
-
-//   // Tabs are set per recipient / signer
-//   let signer1Tabs = docusign.Tabs.constructFromObject({
-//       checkboxTabs: [check1, check2, check3, check4],
-//       listTabs: [list1],
-//       // numberTabs: [number],
-//       radioGroupTabs: [radioGroup],
-//       signHereTabs: [signHere],
-//       textTabs: [text, textInsteadOfNumber]
-//   });
-//   signer1.tabs = signer1Tabs;
-
-//   // Add the recipients to the env object
-//   let recipients = docusign.Recipients.constructFromObject({
-//       signers: [signer1],
-//       carbonCopies: [cc1]});
-
-//   // create the overall template definition
-//   let template = new docusign.EnvelopeTemplate.constructFromObject({
-//       // The order in the docs array determines the order in the env
-//       documents: [doc],
-//       emailSubject: 'Please sign this document',
-//       description: 'Example template created via the API',
-//       name: templateName,
-//       shared: 'false',
-//       recipients: recipients,
-//       status: "created"
-//   });
-
-//   return template;
-// }

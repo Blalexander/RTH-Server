@@ -18,10 +18,25 @@ estimateSchema.pre('findOne', function(next) {
   next();
 })
 
+const templateSchema = mongoose.Schema({
+  templateId: String,
+  data: Object
+});
+
+templateSchema.pre('find', function(next) {
+  this.populate('templates');
+  next();
+})
+
+templateSchema.pre('findOne', function(next) {
+  this.populate('templates');
+  next();
+})
+
 
 const userSchema = mongoose.Schema({
   user: Object
-});
+},{strict: false});
 
 userSchema.pre('find', function(next) {
   this.populate('user');
@@ -68,7 +83,8 @@ scheduleSchema.pre('findOne', function(next) {
 })
 
 const Estimate = mongoose.model("estimate", estimateSchema);
+const Template = mongoose.model("template", templateSchema);
 const Users = mongoose.model("user", userSchema);
 const Schedules = mongoose.model("schedule", scheduleSchema);
 
-module.exports = { Estimate, Users, Schedules };
+module.exports = { Estimate, Template, Users, Schedules };
