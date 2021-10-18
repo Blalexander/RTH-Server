@@ -83,9 +83,7 @@ router.get("/templates", async (req, res) => {
   // estimates.catch(res.send("error!"))
 });
 
-router.get("/users", async (req, res) => {
-  let monthNum = new Date().getUTCMonth()
-
+router.get("/routes", async (req, res) => {
   const userTypes = await Users.aggregate([
     {
       $group: {
@@ -99,20 +97,61 @@ router.get("/users", async (req, res) => {
       }
     }
   ])
-  // console.log(userTypes);
 
   const scheduleInfo = await Schedules.find({})
-  // console.log(scheduleInfo)
+
+  const estimateInfo = await Estimate.find({})
+  // let coordDataToProcess = estimateInfo.map( async eachEst => {
+  let coordDataToProcess = await Promise.all(estimateInfo.map( async eachEst => {
+    eachEst = JSON.parse(JSON.stringify(eachEst))
+    let searchString = `${eachEst.estimate["Address"]}, ${eachEst.estimate["City"]} ${eachEst.estimate["State"]}`
+    const returnItem = await axios
+    .get(
+      `http://api.positionstack.com/v1/forward?access_key=a627f58146067a79ccc486ba7dd1be39&query=${searchString}`,
+      {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    ).then(res => {
+      console.log("MAP RESPONSE: ", {"lat": res.data.data[0].latitude, "long": res.data.data[0].longitude})
+      return ({"lat": res.data.data[0].latitude, "long": res.data.data[0].longitude})
+      // return res
+    })
+    return(returnItem)
+  }))
+  // console.log("ESTIMATE INFO: ", estimateInfo)
 
 
+  // const getCoordsFromAddresses = async (coordDataToProcess) => {
+  //   return Promise.all(docs.map(async (eventDoc) => {
+  //       const event = await addExtrasToDocForUser(eventDoc, currentUserId)
+  //       events.push(event)
+  //   }));
+  // }
 
 
-  //Most simple solution would be to query both users and schedules and send combined response
-  //Long-term solutions would have to take month num into account 
+  // let coordData = []
+  // const result = await axios(`http://api.positionstack.com/v1/forward?access_key=a627f58146067a79ccc486ba7dd1be39&query=${arg}`, {
+  //   method: "GET",
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //   },
+  // })
+  // .then(res => {
+  //   coordData.push({"lat": res.data.data[0].latitude, "long": res.data.data[0].longitude})
+  //   return res
+  // })
+  // .catch(err=>{
+  //   console.error(err);
+  // });
 
-  const usersAndSchedules = {userTypes, scheduleInfo}
-  // console.log(usersAndSchedules)
-  res.json(usersAndSchedules);
+  // console.log("COORDDATA: ", coordData)
+
+
+  const dataForRoutes = {userTypes, scheduleInfo, coordDataToProcess}
+  // console.log(dataForRoutes)
+  res.json(dataForRoutes);
 });
 
 
@@ -223,29 +262,6 @@ router.put('/userprefs', async (req, res) => {
       console.error(err.message);
       res.send(400).send('Server Error');
   }
-});
-
-router.get("/routes", async (req, res) => {
-  const userTypes = await Users.aggregate([
-    {
-      $group: {
-          _id: "$type",
-          name: {$push: "$username"}
-      }
-    },
-    {
-      $sort: {
-        _id: 1
-      }
-    }
-  ])
-  console.log(userTypes);
-
-  const scheduleInfo = await Schedules.find({})
-
-  const usersAndSchedules = {userTypes, scheduleInfo}
-  console.log(usersAndSchedules)
-  res.json(usersAndSchedules);
 });
 
 module.exports = router;
