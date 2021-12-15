@@ -144,7 +144,7 @@ router.post('/', jsonParser, (req, res) => {
 });
 
 router.get('/id/:username', (req, res) => {
-  return User.findOne({username: req.params.username})
+  return User.findOne({username: req.params.username.toLowerCase()})
     .then(user => {
       console.log("USER STUFF: ", user)
       res.json({id: user.id, prefs: user.preferences})

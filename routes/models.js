@@ -53,7 +53,7 @@ const scheduleSchema = mongoose.Schema({
   //   type: Object,
   //   default: undefined
   // },
-  name: String,
+  userId: String,
   // data: {
   //   date: String,
   //   times: String
@@ -82,9 +82,47 @@ scheduleSchema.pre('findOne', function(next) {
   next();
 })
 
+const locationsSchema = mongoose.Schema({
+  userId: String,
+  locations: {
+    String: String
+  }
+},{strict: false});
+
+locationsSchema.pre('find', function(next) {
+  this.populate('locations');
+  next();
+})
+
+locationsSchema.pre('findOne', function(next) {
+  this.populate('locations');
+  next();
+})
+
+
+const messagesSchema = mongoose.Schema({
+  userId: String,
+  messages: {
+    String: String
+  }
+},{strict: false});
+
+messagesSchema.pre('find', function(next) {
+  this.populate('messages');
+  next();
+})
+
+messagesSchema.pre('findOne', function(next) {
+  this.populate('messages');
+  next();
+})
+
 const Estimate = mongoose.model("estimate", estimateSchema);
 const Template = mongoose.model("template", templateSchema);
 const Users = mongoose.model("user", userSchema);
 const Schedules = mongoose.model("schedule", scheduleSchema);
+const Locations = mongoose.model("locations", locationsSchema);
+const Messages = mongoose.model("messages", messagesSchema);
 
-module.exports = { Estimate, Template, Users, Schedules };
+
+module.exports = { Estimate, Template, Users, Schedules, Locations, Messages };

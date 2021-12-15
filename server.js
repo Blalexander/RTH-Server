@@ -130,6 +130,25 @@ app.get('/getCompanyInfo', function (req, res) {
     });
 });
 
+app.get('/getProfitLoss', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({ url: `${url}v3/company/${companyID}/reports/ProfitAndLoss?minorversion=14`, method: 'GET', headers: {'Content-Type': 'application/text'}  })
+    .then(function (authResponse) {
+      console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+      res.send(JSON.parse(authResponse.text()));
+    })
+    .catch(function (e) {
+      console.error(e);
+    });
+});
+
 app.get('/getOrderInfo', function (req, res) {
   const companyID = oauthClient.getToken().realmId;
 
