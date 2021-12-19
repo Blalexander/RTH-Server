@@ -179,7 +179,7 @@ router.get("/routes", async (req, res) => {
 
   let estimateInfo = await Estimate.find({})
   let failedCoords = []
-  let coordData = await Promise.all(estimateInfo.map(async eachEst => {
+  let coordData = await Promise.allSettled(estimateInfo.map(async eachEst => {
     eachEst = JSON.parse(JSON.stringify(eachEst))
 
     if(eachEst.estimate.Coords == undefined) {
