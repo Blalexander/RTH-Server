@@ -52,18 +52,62 @@ router.get("/estimate", async (req, res) => {
 });
 
 router.get("/accounts", async (req, res) => {
-  const accounts = await Users.find({});
-  // console.log(estimates);
+  const accounts = await Users.aggregate([
+    {
+      $sort: {
+        'privileges': 1
+      }
+    }
+  ]);
+
   res.json(accounts);
-  // estimates.catch(res.send("error!"))
+});
+
+router.get("/catalog", async (req, res) => {
+  const catalog = await Template.find({});
+
+  res.json(catalog);
 });
 
 router.get("/userdata", async (req, res) => {
   console.log("req query: ", req.query)
-  const userData = await Estimate.aggregate([
+  // const userData = await Estimate.aggregate([
+  //   {
+  //     $match: {
+  //       'estimate.Created By': req.query.username
+  //     }
+  //   }
+  // ])
+  const oldOrders = await Estimate.aggregate([
+      {
+        $addFields: {
+          convertedDate: { $toDate: "$timestamp" }
+        }
+      },
+      {
+        $sort: {
+          "convertedDate": 1 
+        }
+      },
+      {
+        $limit : 10
+      }
+  ])
+
+  const trackedOrders = await Estimate.aggregate([
     {
       $match: {
-        'estimate.Created By': req.query.username
+        'estimate.Tracked': 'tracked'
+      }
+    }
+  ])
+
+  let dateToMatch = 'details.' + `${date.getUTCMonth()+1}/${date.getDate()}`
+  console.log("DATE TO MATCH: ", dateToMatch)
+  const whosWorking = await Schedules.aggregate([
+    {
+      $match: {
+        [dateToMatch]: {$exists: true} 
       }
     }
   ])
@@ -85,7 +129,7 @@ router.get("/userdata", async (req, res) => {
     }
   ])
 
-  let userAndMessages = {userData, allMessages, userTypes}
+  let userAndMessages = {oldOrders, trackedOrders, whosWorking, allMessages, userTypes}
 
   res.json(userAndMessages);
 });
@@ -121,13 +165,36 @@ router.put("/estimates", async (req, res) => {
   console.log("ESTIMATE UPDATE REQUEST: ", req.body)
 
   let query = {"_id": mongoose.Types.ObjectId(req.body.id)}
-  let update = {
+  let update1 = {
     "$push": {
       "changelog": {[req.body.field]: {"value": req.body.value, "time": currentTime, "by": req.body.by} }
     }
   }
 
-  return es.collection.findOneAndUpdate(query, update)
+  let update2
+
+  if(req.body.field == "Stage Update") {   
+    let pointer = req.body.value.search("Stage")
+    let value = req.body.value.substring(pointer)
+    let method = req.body.value.substring(0, pointer-1)
+    update2 = {
+      "$set": {
+        "estimate.Stage": {"value": value, "method": method}
+      }
+    }
+  }
+  else {
+    update2 = {
+      "$set": {
+        "estimate.Tracked": req.body.value
+      }
+    }
+  }
+  let options2 = { returnNewDocument: true}
+
+  es.collection.findOneAndUpdate(query, update1)
+  return es.collection.findOneAndUpdate(query, update2, options2)
+
   .then(updatedDocument => {
     if(updatedDocument) {
       res.json(`Successfully updated document: ${updatedDocument}.`)
