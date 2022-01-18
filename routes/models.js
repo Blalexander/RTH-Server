@@ -33,6 +33,20 @@ templateSchema.pre('findOne', function(next) {
   next();
 })
 
+const catalogSchema = mongoose.Schema({
+  catalogId: String,
+  data: Object
+});
+
+catalogSchema.pre('find', function(next) {
+  this.populate('catalog');
+  next();
+})
+
+catalogSchema.pre('findOne', function(next) {
+  this.populate('catalog');
+  next();
+})
 
 const userSchema = mongoose.Schema({
   user: Object
@@ -119,10 +133,11 @@ messagesSchema.pre('findOne', function(next) {
 
 const Estimate = mongoose.model("estimate", estimateSchema);
 const Template = mongoose.model("template", templateSchema);
+const Catalog = mongoose.model("catalog", catalogSchema);
 const Users = mongoose.model("user", userSchema);
 const Schedules = mongoose.model("schedule", scheduleSchema);
 const Locations = mongoose.model("locations", locationsSchema);
 const Messages = mongoose.model("messages", messagesSchema);
 
 
-module.exports = { Estimate, Template, Users, Schedules, Locations, Messages };
+module.exports = { Estimate, Template, Catalog, Users, Schedules, Locations, Messages };

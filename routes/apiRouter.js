@@ -2,7 +2,7 @@ const axios = require("axios");
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
-const { Estimate, Template, Users, Schedules, Locations, Messages } = require("./models");
+const { Estimate, Template, Catalog, Users, Schedules, Locations, Messages } = require("./models");
 const bodyParser = require("body-parser");
 const { ResumeToken } = require("mongodb");
 const jsonParser = bodyParser.json();
@@ -26,12 +26,13 @@ mongoose.connect(
 
 const es = Estimate()
 const tl = Template()
+const ca = Catalog()
 const us = Users()
 const sch = Schedules()
 const lo = Locations()
 const me = Messages()
 let date = new Date()
-let currentTime = `${date.getUTCMonth()+1}/${date.getDate()}/${date.getFullYear()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}:${date.getSeconds()}`
+let currentTime = () =>`${date.getUTCMonth()+1}/${date.getDate()}/${date.getFullYear()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}:${date.getSeconds()}`
 
 router.get("/estimates", async (req, res) => {
   const estimates = await Estimate.find({});
@@ -64,10 +65,63 @@ router.get("/accounts", async (req, res) => {
 });
 
 router.get("/catalog", async (req, res) => {
-  const catalog = await Template.find({});
+  const catalog = await Catalog.find({});
 
   res.json(catalog);
 });
+
+router.post("/catalogitem", async (req, res) => {
+  console.log("Catalog item requested: ", req)
+  const catalogitem = await Catalog.aggregate([
+    {
+      $match: {
+        'item': req.body.product
+      }
+    }
+  ]).catch(err => res.json(err))
+  res.json(catalogitem);
+});
+
+router.put("/catalog", async (req, res) => {
+  let query = {"_id": mongoose.Types.ObjectId(req.body.id)}
+  let update
+  let options = { returnNewDocument: true, upsert: true}
+
+  if(req.body.intent === "edit product") {
+    // let updateTarget = "template." + req.body.category + req.body.item + req.body.field
+    update = {
+      "$set": {
+        "category": req.body.category, "item": req.body.item, "cost": req.body.cost, "stock": req.body.stock
+      }
+    }
+
+    return ca.collection.findOneAndUpdate(query, update, options)
+  }
+  else if(req.body.intent === "update stock") {
+    // let updateTarget = "template." + req.body.category + req.body.item + req.body.field
+    update = {
+      "$set": {
+        "category": req.body.category, "item": req.body.item, "cost": req.body.cost, "stock": req.body.stock, "last restock": currentTime()
+      }
+    }
+
+    return ca.collection.findOneAndUpdate(query, update, options)
+  }
+  else if(req.body.intent === "create") {
+    let insertionObj = {"category": req.body.category, "item": req.body.item, "cost": req.body.cost, "stock": req.body.stock, "last restock": currentTime(), "created at": currentTime()};
+    ca.collection.insertOne(insertionObj, onInsert);
+    function onInsert(err) {
+      if (err) {
+        console.log("Error!", err);
+      } else {
+        console.info("Item was successfully stored.");
+        res.json("item stored");
+      }
+    }
+  }
+
+  // return tl.collection.findOneAndUpdate(query, update, options)
+})
 
 router.get("/userdata", async (req, res) => {
   console.log("req query: ", req.query)
@@ -119,7 +173,8 @@ router.get("/userdata", async (req, res) => {
       $group: {
           _id: "$type",
           name: {$push: "$username"},
-          id: {$push: "$_id"}
+          id: {$push: "$_id"},
+          background: {$push: "$background"}
       }
     },
     {
@@ -129,7 +184,23 @@ router.get("/userdata", async (req, res) => {
     }
   ])
 
-  let userAndMessages = {oldOrders, trackedOrders, whosWorking, allMessages, userTypes}
+  const catalog = await Catalog.aggregate([
+    {
+      $addFields: {
+        convertedDate: { $toDate: "$created at" }
+      }
+    },
+    {
+      $sort: {
+        "convertedDate": -1 
+      }
+    },
+    {
+      $limit : 10
+    }
+  ]);
+
+  let userAndMessages = {oldOrders, trackedOrders, whosWorking, allMessages, userTypes, catalog}
 
   res.json(userAndMessages);
 });
@@ -147,9 +218,50 @@ router.get("/username", async (req, res) => {
   res.json(userData[0].username);
 });
 
+router.get("/reports", async (req, res) => {
+  console.log("req query: ", req.query)
+  const reportData = await Estimate.aggregate([
+    // {
+    //   $group:   {
+    //     _id:  {
+    //         credit: "$estimate.Payment.credit",
+    //         dedit: "$estimate.Payment.dedit",
+    //         cash: "$estimate.Payment.cash",
+    //         check: "$estimate.Payment.check"
+    //     },
+    //     count: {$sum:1}
+    //   }
+    // },
+    {
+      $group:   {
+        _id: "payments",
+        "credit": {
+          $push: "$estimate.Payment.credit"
+        },
+        "web": {
+          $push: "$estimate.Payment.web"
+        },
+        "cash": {
+          $push: "$estimate.Payment.cash"
+        },
+        "check": {
+          $push: "$estimate.Payment.check"
+        },
+        creditRev: {$sum: "$estimate.Payment.credit"},
+        webRev: {$sum: "$estimate.Payment.web"},
+        cashRev: {$sum: "$estimate.Payment.cash"},
+        checkRev: {$sum: "$estimate.Payment.check"},
+        count: {$sum: "$credit"}
+      }
+    }
+  ])
+
+  res.json(reportData);
+});
+
 router.post("/estimates", async (req, res) => {
   console.log("REQUEST: ", req)
-  let insertionObj = { estimate: req.body, timestamp: currentTime, changelog: [] };
+  let insertionObj = { estimate: req.body, timestamp: currentTime(), changelog: [] };
   es.collection.insertOne(insertionObj, onInsert);
   function onInsert(err, docs) {
     if (err) {
@@ -165,14 +277,33 @@ router.put("/estimates", async (req, res) => {
   console.log("ESTIMATE UPDATE REQUEST: ", req.body)
 
   let query = {"_id": mongoose.Types.ObjectId(req.body.id)}
+  let valToInsert 
+  switch(req.body.field) {
+    case("Payment"): {
+      valToInsert = req.body.paymentType + " $" + req.body.value
+      break;
+    }
+    case("Stage Update"): {
+      valToInsert = req.body.value
+      break;
+    }
+    case("Edit"): {
+      console.log("LINEKEY VAL: ", req.body.value)
+      valToInsert = req.body.linekey + ": " + req.body.value.name
+      break;
+    }
+    default: {
+      res.json("Error finding specified document.", req.body)
+      break;
+    }
+  }
   let update1 = {
-    "$push": {
-      "changelog": {[req.body.field]: {"value": req.body.value, "time": currentTime, "by": req.body.by} }
+    "$push": { 
+      "changelog": {[req.body.field]: {"value": valToInsert, "time": currentTime(), "by": req.body.by} }
     }
   }
 
   let update2
-
   if(req.body.field == "Stage Update") {   
     let pointer = req.body.value.search("Stage")
     let value = req.body.value.substring(pointer)
@@ -180,6 +311,23 @@ router.put("/estimates", async (req, res) => {
     update2 = {
       "$set": {
         "estimate.Stage": {"value": value, "method": method}
+      }
+    }
+  }
+  else if(req.body.field == "Payment") {
+    let lineFinder = "estimate.Payment." + [req.body.paymentType]
+    let amountPaid = req.body.value + req.body.previousValue
+    update2 = {
+      "$set": {
+        [lineFinder]: amountPaid
+      }
+    }
+  }
+  else if(req.body.field == "Edit") {
+    let lineFinder = req.body.storeName === undefined ? "estimate." + req.body.linekey : "estimate." + req.body.linekey + "." + req.body.storeName
+    update2 = {
+      "$set": {
+        [lineFinder]: req.body.value
       }
     }
   }
@@ -197,7 +345,7 @@ router.put("/estimates", async (req, res) => {
 
   .then(updatedDocument => {
     if(updatedDocument) {
-      res.json(`Successfully updated document: ${updatedDocument}.`)
+      res.json(updatedDocument)
     } else {
       res.json("No document matches the provided query.")
     }
@@ -225,6 +373,16 @@ router.get("/templates", async (req, res) => {
   res.json(templates);
   // estimates.catch(res.send("error!"))
 });
+
+router.get("/tax", async (req, res) => {
+  const returnItem = await axios
+  .get(
+    `https://services.maps.cdtfa.ca.gov/api/taxrate/GetRateByAddress?address=9036 winnetka ave&city=northridge&zip=91324`,
+  ).then(res => {
+    return res.data.taxRateInfo[0].rate
+  }).catch(err => res.json(err))
+  res.json(returnItem)
+})
 
 router.get("/routes", async (req, res) => {
   const userTypes = await Users.aggregate([
@@ -311,7 +469,20 @@ router.get("/routes", async (req, res) => {
     return(returnItem)
   }))
 
-  const dataForRoutes = {userTypes, scheduleInfo, coordData, backupCoords}
+  const accounts = await Users.aggregate([
+    {
+      $match: {
+        'type': 'driver'
+      }
+    },
+    {
+      $project: {
+        'background': 1
+      }
+    }
+  ]);
+
+  const dataForRoutes = {userTypes, scheduleInfo, coordData, backupCoords, accounts}
   // console.log(dataForRoutes)
   res.json(dataForRoutes);
 });
@@ -367,6 +538,7 @@ router.put("/routes", async (req, res) => {
 })
 
 router.get("/location", async (req, res) => {
+  // console.log("REQ QUERY: ", req, req.query)
   const locationInfo = await Locations.aggregate([
     {
       $match: {
@@ -374,25 +546,30 @@ router.get("/location", async (req, res) => {
       }
     }
   ])
-  console.log("LOCATION INFO: ", locationInfo)
-
-  let searchString = `${locationInfo[0].locations[0].lat}, ${locationInfo[0].locations[0].long}`
-  console.log("Driver Location Search String: ", searchString)
-  const locationData = await axios
-  .get(
-    `http://api.positionstack.com/v1/reverse?access_key=a627f58146067a79ccc486ba7dd1be39&query=${searchString}&limit=1`,
-    {
-      headers: {
-        "Content-Type": "application/json"
+    
+  if(locationInfo.length > 0) {
+    console.log("LOC INFO: ", locationInfo)
+    let searchString = `${locationInfo[0].locations[0].lat}, ${locationInfo[0].locations[0].long}`
+    console.log("Driver Location Search String: ", searchString)
+    const locationData = await axios
+    .get(
+      `http://api.positionstack.com/v1/reverse?access_key=a627f58146067a79ccc486ba7dd1be39&query=${searchString}&limit=1`,
+      {
+        headers: {
+          "Content-Type": "application/json"
+        }
       }
-    }
-  ).then(res => {
-    console.log("RES FOR DRIVER LOCATION: ", res.data)
-    let place = res.data.data[0].neighbourhood == null ? res.data.data[0].locality : res.data.data[0].neighbourhood
-    return place
-  }).catch(err => res.json(`Failed to find map coords: ${err}`))
-
-  res.json(locationData);
+      ).then(res => {
+        console.log("RES FOR DRIVER LOCATION: ", res.data)
+        let place = res.data.data[0].neighbourhood == null ? res.data.data[0].locality : res.data.data[0].neighbourhood
+        return place
+      }).catch(err => res.json(`Failed to find map coords: ${err}`))
+      res.json(locationData);
+      
+  }
+  else {
+    res.json("No location information for this user.");
+  }
 });
 
 
@@ -573,7 +750,7 @@ router.put('/userprefs', async (req, res) => {
 
 router.post("/messages", async (req, res) => {
   console.log("MESSAGE REQUEST: ", req.body)
-  let insertionObj = { author: req.body.author, message: req.body.content, at: req.body.at, timestamp: currentTime };
+  let insertionObj = { author: req.body.author, message: req.body.content, at: req.body.at, timestamp: currentTime() };
   me.collection.insertOne(insertionObj, onInsert);
   function onInsert(err, docs) {
     if (err) {
