@@ -147,7 +147,7 @@ router.get('/id/:username', (req, res) => {
   return User.findOne({username: req.params.username.toLowerCase()})
     .then(user => {
       console.log("USER STUFF: ", user)
-      res.json({id: user.id, prefs: user.preferences})
+      res.json({id: user.id, prefs: user.preferences, privs: user.privileges, bg: user.background})
     })
     .catch(err => res.status(500).json({message: 'Internal server error, unable to find user by username.'}));
 });
