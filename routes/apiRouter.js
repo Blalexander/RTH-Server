@@ -205,6 +205,31 @@ router.get("/userdata", async (req, res) => {
   res.json(userAndMessages);
 });
 
+
+
+
+
+router.get("/nameidmap", async (req, res) => {
+  console.log("req query: ", req.query)
+  const userTypes = await Users.aggregate([
+    {
+      $group: {
+          _id: "$type",
+          name: {$push: "$username"},
+          id: {$push: "$_id"},
+          background: {$push: "$background"}
+      }
+    },
+    {
+      $sort: {
+        _id: 1
+      }
+    }
+  ])
+
+  res.json(userTypes);
+});
+
 router.get("/username", async (req, res) => {
   console.log("req query: ", req.query)
   const userData = await Users.aggregate([
@@ -220,7 +245,7 @@ router.get("/username", async (req, res) => {
 
 router.get("/reports", async (req, res) => {
   console.log("req query: ", req.query)
-  const reportData = await Estimate.aggregate([
+  const paymentData = await Estimate.aggregate([
     // {
     //   $group:   {
     //     _id:  {
@@ -256,8 +281,112 @@ router.get("/reports", async (req, res) => {
     }
   ])
 
-  res.json(reportData);
+  const cartData = await Estimate.aggregate([
+    {
+      $project:   {
+        _id:  "$_id",
+        "carts": {$objectToArray: "$estimate.Cart"},
+        "payments": {$objectToArray: "$estimate.Payment"},
+        count: {$sum:1}
+      }
+    },
+  ])
+
+  const dataForReports = {paymentData, cartData}
+
+  res.json(dataForReports);
 });
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// project: {
+//   _id: "$_id",
+//   "cart": {$objectToArray: "$estimate.Cart"}
+// }
+// group: {
+//   _id: {
+//     name: "$_id",
+//     thecart: "$cart"
+//   },
+
+// }
+// unwind: {
+//   path: "$_id.thecart",
+//   preserveNullAndEmptyArrays: true
+// }
+// group: {
+//   _id: "$_id.name",
+//   names: {$push: "$_id.thecart.k"},
+//   totalsdue: {$push: "$_id.thecart.v.total"},
+//   totalspaid: {
+//     $addToSet: "$_id.thecart.v"
+//   },
+// }
+// unwind: {
+//   path: "$totalspaid"
+// }
+// project: {
+//   totalspaid: 1,
+//   checker: {
+//         $eq: [{$type: "$totalspaid"}, "string"]
+//   },
+//   denom: {
+//       $cond: {
+//         if: {
+//         $eq: [{$type: "$totalspaid"}, "string"]
+//         },
+//         then: "$totalspaid",
+//         else: "$$REMOVE"
+//       }
+//   },
+//   numer: {
+//     $cond: {
+//       if: {
+//       $eq: [{$type: "$totalspaid"}, "object"]
+//       },
+//       then: "$totalspaid.total",
+//       else: "$$REMOVE"
+//     }
+//   }
+// }
+// project: {
+//   denom: 1,
+//   numer: 1
+// }
+// group: {
+//   _id: {
+//     name: "$_id",
+//     denominators: {$toDouble: "$denom"}
+//   },
+//   numerator: {$push: "$numer"},
+//   sumNumerator: {$sum: "$numer"},
+//   denominator: {$addToSet: {$toDouble: "$denom"}},
+// }
+// project: {
+//   _id: 1,
+//   numerator: 1,
+//   // sumTotal: {$divide: ["$numerator", 5]}
+// }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+router.put('/userassignments', async (req, res) => {
+  console.log("REQ.BODY: ", req.body)
+  let query = {"_id": mongoose.Types.ObjectId(req.body.id)}
+  let saveField = "assignments." + req.body.field
+  let update1 = {
+    "$push": { 
+      "assignments": {"value": req.body.value, "time": currentTime(), "by": req.body.by} 
+    }
+  }
+
+  us.collection.findOneAndUpdate(query, update1)
+  res.json("Assignment updated!")
+})
+
+
 
 router.post("/estimates", async (req, res) => {
   console.log("REQUEST: ", req)
@@ -477,7 +606,9 @@ router.get("/routes", async (req, res) => {
     },
     {
       $project: {
-        'background': 1
+        'background': 1,
+        'assignments': 1,
+        'confirms': 1
       }
     }
   ]);
@@ -486,6 +617,27 @@ router.get("/routes", async (req, res) => {
   // console.log(dataForRoutes)
   res.json(dataForRoutes);
 });
+
+router.get("/petinfo", async (req, res) => {
+  const petInfo = await Estimate.aggregate([
+    {
+      $match: {
+        '_id': mongoose.Types.ObjectId(req.query.p)
+      }
+    },
+    {
+      $project: {
+        'estimate.Pet Name': 1
+      }
+    }
+  ]).then(theInfo => {
+    res.json(theInfo)
+  }).catch(err => {
+    res.json(err)
+  })
+
+  // res.json(petInfo)
+})
 
 router.put("/routes", async (req, res) => {
   let idToAmend = "614bbbccfe250b003407ba59"
