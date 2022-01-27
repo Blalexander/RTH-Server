@@ -689,7 +689,7 @@ router.put("/routes", async (req, res) => {
   // .catch(err => res.json(`Failed to find and update document: ${err}`))
 })
 
-router.get("/location", async (req, res) => {
+router.get("/onelocation", async (req, res) => {
   // console.log("REQ QUERY: ", req, req.query)
   const locationInfo = await Locations.aggregate([
     {
@@ -702,7 +702,7 @@ router.get("/location", async (req, res) => {
   if(locationInfo.length > 0) {
     console.log("LOC INFO: ", locationInfo)
     let searchString = `${locationInfo[0].locations[0].lat}, ${locationInfo[0].locations[0].long}`
-    console.log("Driver Location Search String: ", searchString)
+    console.log("Driver location search string: ", searchString)
     const locationData = await axios
     .get(
       `http://api.positionstack.com/v1/reverse?access_key=a627f58146067a79ccc486ba7dd1be39&query=${searchString}&limit=1`,
@@ -712,11 +712,29 @@ router.get("/location", async (req, res) => {
         }
       }
       ).then(res => {
-        console.log("RES FOR DRIVER LOCATION: ", res.data)
-        let place = res.data.data[0].neighbourhood == null ? res.data.data[0].locality : res.data.data[0].neighbourhood
-        return place
+        if(res.statusText === "OK") {       
+            console.log("RES FOR DRIVER LOCATION: ", res.data)
+          // console.log("ADDITIONAL RES INFO: ", res.data, res.statusText, res.statusText === "OK")
+          // res = res.json()
+
+          // let place = res.data.data[0].neighbourhood == null ? res.data.data[0].locality : res.data.data[0].neighbourhood
+          // return place
+
+        }
+        else {
+          // throw new Error(res.statusText);
+          throw new Error(res.statusText, res);
+        }
+        return res
+      })
+      .then(parseRes => {
+        console.log("PARSED RES: ", parseRes.data)
+        let place = parseRes.data.data[0].neighbourhood == null ? parseRes.data.data[0].locality : parseRes.data.data[0].neighbourhood
+        // return place
+        res.json(place)
       }).catch(err => res.json(`Failed to find map coords: ${err}`))
-      res.json(locationData);
+      // res.json(locationData);
+      locationData
       
   }
   else {
@@ -773,7 +791,8 @@ router.get("/schedules", async (req, res) => {
       $group: {
           _id: "$type",
           name: {$push: "$username"},
-          id: {$push: "$_id"}
+          id: {$push: "$_id"},
+          background: {$push: "$background"}
       }
     },
     {
@@ -799,45 +818,56 @@ router.put('/schedules', async (req, res) => { //NEED to make schedules also use
   let options = {upsert: true, new: true, setDefaultsOnInsert: true };
   let findOptions = {_id: 0, userId: 1, details: 1} 
 
-  console.log({nameOb, details})
-  try {
-    const findRes = await Schedules.findOne(nameOb, findOptions)
-    console.log("findRes: ", findRes)
-    if(findRes != null) {
-      const findAndUpdate = await Schedules.findOneAndUpdate(nameOb, details, options)
-      console.log("findAndUpdate: ", findAndUpdate)
-      res.json("FindAndUpdate successful1")
+
+  if(req.body.times === "clear") {
+    let update = {
+      "$unset": {[detailsOb]: ""}
     }
-    else {
-      const findIfExists = await Schedules.findOne({"userId": req.body.userId}, findOptions)
-      console.log("findIfExists: ", findIfExists)
-      if(findIfExists != null) {
-        let updateOb = {
-          userId: findIfExists.userId,
-          details: {
-            [req.body.date]: req.body.times,
-          }
-        }
-        let oldObjKeys = Object.entries(findIfExists['_doc'].details)
-        console.log("oldObjKeys: ", oldObjKeys)
-        oldObjKeys.forEach(eachitem => {
-          console.log({eachitem}, eachitem[0], eachitem[1])
-          updateOb.details[eachitem[0]] = eachitem[1]
-        })
-        console.log("updateOb: ", updateOb)
-        const updatedetails = await Schedules.replaceOne({"userId": req.body.userId}, updateOb, options)
-        console.log("updatedetails: ", updatedetails)
-        res.json("FindIfExists successful")
-      }
-      else { //create new doc if doesn't exist
+    const clearRes = await Schedules.findOneAndUpdate(nameOb, update)
+    console.log("findAndDelete: ", clearRes)
+    res.json("FindAndDelete successful")
+  }
+  else {
+    console.log({nameOb, details})
+    try {
+      const findRes = await Schedules.findOne(nameOb, findOptions)
+      console.log("findRes: ", findRes)
+      if(findRes != null) {
         const findAndUpdate = await Schedules.findOneAndUpdate(nameOb, details, options)
         console.log("findAndUpdate: ", findAndUpdate)
-        res.json("FindAndUpdate successful2")
+        res.json("FindAndUpdate successful")
       }
+      else {
+        const findIfExists = await Schedules.findOne({"userId": req.body.userId}, findOptions)
+        console.log("findIfExists: ", findIfExists)
+        if(findIfExists != null) {
+          let updateOb = {
+            userId: findIfExists.userId,
+            details: {
+              [req.body.date]: req.body.times,
+            }
+          }
+          let oldObjKeys = Object.entries(findIfExists['_doc'].details)
+          console.log("oldObjKeys: ", oldObjKeys)
+          oldObjKeys.forEach(eachitem => {
+            console.log({eachitem}, eachitem[0], eachitem[1])
+            updateOb.details[eachitem[0]] = eachitem[1]
+          })
+          console.log("updateOb: ", updateOb)
+          const updatedetails = await Schedules.replaceOne({"userId": req.body.userId}, updateOb, options)
+          console.log("updatedetails: ", updatedetails)
+          res.json("FindIfExists successful")
+        }
+        else { //create new doc if doesn't exist
+          const findAndUpdate = await Schedules.findOneAndUpdate(nameOb, details, options)
+          console.log("findAndUpdate: ", findAndUpdate)
+          res.json("FindAndUpdate successful2")
+        }
+      }
+    } catch(err) {
+        console.error(err.message);
+        res.send(400).send('Server Error');
     }
-  } catch(err) {
-      console.error(err.message);
-      res.send(400).send('Server Error');
   }
 });
 
@@ -846,7 +876,7 @@ router.put('/userprefs', async (req, res) => {
   let nameOb = {"name": req.body.name, "preferences": {$exists: true}}
   let details = {"preferences": req.body.preferences}
   let options = {upsert: true, new: true, setDefaultsOnInsert: true };
-  let findOptions = {_id: 1, name: 1, preferences: 1, password: 1, type: 1} 
+  let findOptions = {_id: 1, name: 1, preferences: 1, password: 1, type: 1, background: 1} 
 
   console.log({nameOb, details})
   try {

@@ -21,6 +21,13 @@ const UserSchema = mongoose.Schema({
   preferences: {
     type: Array,
     required: false
+  },
+  privileges: {
+    type: Number,
+    required: false
+  },
+  background: {
+    type: String
   }
 });
 
@@ -30,6 +37,8 @@ UserSchema.methods.serialize = function() {
     id: this._id,
     type: this.type || '',
     preferences: this.preferences || '',
+    privileges: this.privileges || '',
+    background: this.background || '',
   };
 };
 

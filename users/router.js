@@ -146,7 +146,7 @@ router.post('/', jsonParser, (req, res) => {
 router.get('/id/:username', (req, res) => {
   return User.findOne({username: req.params.username.toLowerCase()})
     .then(user => {
-      console.log("USER STUFF: ", user)
+      console.log("USER STUFF: ", user, user.id, user.preferences, user.privileges, user.background)
       res.json({id: user.id, prefs: user.preferences, privs: user.privileges, bg: user.background})
     })
     .catch(err => res.status(500).json({message: 'Internal server error, unable to find user by username.'}));

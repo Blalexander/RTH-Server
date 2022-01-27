@@ -73,36 +73,36 @@ let redirectUri = '';
 
 let oauthClient = null;
 
-app.get('/authUri', urlencodedParser, function (req, res) {
-  oauthClient = new OAuthClient({
-    clientId: 'ABm4IChJWiZjVNEGakr4oxGZVCrVkxI4XZ9O7cfEozK3q7XES5',
-    clientSecret: 'fwMwHuEXtF417MjdzbzZOC6M6TMVKY2Q7jNkQcSb',
-    environment: 'sandbox',
-    redirectUri: 'https://rth-server.azurewebsites.net/callback',
-  });
+// app.get('/authUri', urlencodedParser, function (req, res) {
+//   oauthClient = new OAuthClient({
+//     clientId: 'ABm4IChJWiZjVNEGakr4oxGZVCrVkxI4XZ9O7cfEozK3q7XES5',
+//     clientSecret: 'fwMwHuEXtF417MjdzbzZOC6M6TMVKY2Q7jNkQcSb',
+//     environment: 'sandbox',
+//     redirectUri: 'https://rth-server.azurewebsites.net/callback',
+//   });
 
-  const authUri = oauthClient.authorizeUri({
-    scope: [OAuthClient.scopes.Accounting],
-    state: 'intuit-test',
-  });
-  res.send(authUri);
-});
+//   const authUri = oauthClient.authorizeUri({
+//     scope: [OAuthClient.scopes.Accounting],
+//     state: 'intuit-test',
+//   });
+//   res.send(authUri);
+// });
 
-/**
- * Handle the callback to extract the `Auth Code` and exchange them for `Bearer-Tokens`
- */
- app.get('/callback', function (req, res) {
-  oauthClient
-    .createToken(req.url)
-    .then(function (authResponse) {
-      oauth2_token_json = JSON.stringify(authResponse.getJson(), null, 2);
-    })
-    .catch(function (e) {
-      console.error(e);
-    });
+// /**
+//  * Handle the callback to extract the `Auth Code` and exchange them for `Bearer-Tokens`
+//  */
+//  app.get('/callback', function (req, res) {
+//   oauthClient
+//     .createToken(req.url)
+//     .then(function (authResponse) {
+//       oauth2_token_json = JSON.stringify(authResponse.getJson(), null, 2);
+//     })
+//     .catch(function (e) {
+//       console.error(e);
+//     });
 
-  res.send('');
-});
+//   res.send('');
+// });
 
 /**
  * Display the token : CAUTION : JUST for sample purposes
