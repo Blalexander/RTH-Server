@@ -119,6 +119,15 @@ router.put("/catalog", async (req, res) => {
       }
     }
   }
+  else if(req.body.intent === "delete") {
+    // update = {
+    //   "$set": {
+    //     "category": req.body.category, "item": req.body.item, "cost": req.body.cost, "stock": req.body.stock
+    //   }
+    // }
+
+    return ca.collection.findOneAndDelete(query)
+  }
 
   // return tl.collection.findOneAndUpdate(query, update, options)
 })
@@ -780,7 +789,7 @@ router.get("/locations", async (req, res) => {
   }))
   console.log("LOCATION DATA: ", locationData)
 
-  res.json(locationData);
+  res.json(locationData); //could the issue be this is doing a res.json by default and if it errors it is also providing one?
 });
 
 
